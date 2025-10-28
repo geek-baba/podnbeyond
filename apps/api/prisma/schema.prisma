@@ -1,0 +1,161 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      UserRole @default(GUEST)
+  points    Int      @default(0)
+  tier      String   @default("BRONZE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  bookings      Booking[]
+  loyaltyLedger LoyaltyLedger[]
+
+  @@map("users")
+}
+
+model RoomType {
+  id        String   @id @default(cuid())
+  name      String
+  capacity  Int
+  amenities String[] // JSON array of amenities
+  images    String[] // Array of image URLs
+  baseRate  Int      // Base rate in paise (₹1 = 100 paise)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  inventory       Inventory[]
+  bookings        Booking[]
+  channelMappings ChannelMapping[]
+
+  @@map("room_types")
+}
+
+model Inventory {
+  id         String   @id @default(cuid())
+  roomTypeId String
+  date       DateTime @db.Date
+  allotment  Int      // Total rooms available
+  booked     Int      @default(0) // Rooms booked
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([roomTypeId, date])
+  @@index([date])
+  @@map("inventory")
+}
+
+model RatePlan {
+  id          String  @id @default(cuid())
+  name        String
+  refundable  Boolean @default(true)
+  discountPct Int?    // Discount percentage (0-100)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("rate_plans")
+}
+
+model Booking {
+  id              String        @id @default(cuid())
+  userId          String?
+  roomTypeId      String
+  checkIn         DateTime      @db.Date
+  checkOut        DateTime      @db.Date
+  guests          Int
+  amountPaise     Int           // Total amount in paise
+  status          BookingStatus @default(PENDING)
+  razorpayOrderId String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Guest details (for non-registered users)
+  guestName  String?
+  guestEmail String?
+  guestPhone String?
+
+  // Relations
+  user     User?    @relation(fields: [userId], references: [id])
+  roomType RoomType @relation(fields: [roomTypeId], references: [id])
+
+  @@index([status])
+  @@index([checkIn, checkOut])
+  @@map("bookings")
+}
+
+model LoyaltyLedger {
+  id        String            @id @default(cuid())
+  userId    String
+  points    Int               // Positive for earn, negative for redeem
+  type      LoyaltyActionType
+  ref       String?           // Reference (booking ID, etc.)
+  createdAt DateTime          @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("loyalty_ledger")
+}
+
+model ChannelMapping {
+  id           String @id @default(cuid())
+  provider     String // 'beds24', 'mmtrip', etc.
+  roomTypeId   String
+  providerCode String // External room code
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, roomTypeId])
+  @@map("channel_mappings")
+}
+
+model ProviderPayload {
+  id        String   @id @default(cuid())
+  provider  String   // Provider name
+  direction String   // 'push' or 'pull'
+  kind      String   // 'availability', 'rates', 'bookings'
+  payload   Json     // Request/response payload
+  createdAt DateTime @default(now())
+
+  @@index([provider, createdAt])
+  @@map("provider_payloads")
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+  GUEST
+}
+
+enum BookingStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum LoyaltyActionType {
+  EARN
+  REDEEM
+  ADJUST
+}

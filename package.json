@@ -1,0 +1,30 @@
+{
+  "name": "podnbeyond",
+  "version": "1.0.0",
+  "description": "Pod & Beyond Hotel Booking Platform",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write .",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "dotenv-cli": "^7.3.0",
+    "eslint": "^8.55.0",
+    "prettier": "^3.1.0",
+    "ts-node": "^10.9.1",
+    "turbo": "^1.11.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

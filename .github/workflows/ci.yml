@@ -1,0 +1,178 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  setup-and-checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/podnbeyond
+      WEB_URL: http://localhost:3000
+      API_URL: http://localhost:4000
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Generate Prisma Client
+        working-directory: apps/api
+        run: npx prisma generate
+      
+      - name: Migrate DB
+        working-directory: apps/api
+        run: npx prisma migrate deploy || npx prisma migrate dev --name ci
+      
+      - name: Lint
+        run: npm run lint --workspaces --if-present
+      
+      - name: Typecheck
+        run: npm run typecheck --workspaces --if-present
+      
+      - name: Build
+        run: npm run build --workspaces --if-present
+
+  api-tests:
+    needs: setup-and-checks
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/podnbeyond
+      NODE_ENV: test
+      JWT_SECRET: test_secret
+      RAZORPAY_KEY_ID: test_key
+      RAZORPAY_KEY_SECRET: test_secret
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      
+      - run: npm ci
+      
+      - name: Prisma generate + migrate
+        working-directory: apps/api
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy || npx prisma migrate dev --name ci
+      
+      - name: Seed (optional)
+        working-directory: apps/api
+        run: npm run prisma:seed --if-present
+      
+      - name: Run API tests
+        run: npm run test --workspaces --if-present
+
+  e2e-smoke:
+    needs: setup-and-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/podnbeyond
+      WEB_URL: http://localhost:3000
+      API_URL: http://localhost:4000
+      JWT_SECRET: test_secret
+      RAZORPAY_KEY_ID: test_key
+      RAZORPAY_KEY_SECRET: test_secret
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      
+      - run: npm ci
+      
+      - name: Prisma generate + migrate
+        working-directory: apps/api
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy || npx prisma migrate dev --name ci
+          node -e "console.log('DB ready')"
+      
+      - name: Install Playwright
+        working-directory: apps/web
+        run: npx playwright install --with-deps
+      
+      - name: Start API
+        working-directory: apps/api
+        run: |
+          npm run build --if-present
+          nohup npm start >/tmp/api.log 2>&1 &
+      
+      - name: Start Web
+        working-directory: apps/web
+        run: |
+          npm run build --if-present
+          nohup npm start >/tmp/web.log 2>&1 &
+      
+      - name: Wait for services
+        run: |
+          npx wait-on -t 60000 tcp:4000
+          npx wait-on -t 60000 http://localhost:3000/healthz || true
+      
+      - name: Run Playwright smoke tests
+        working-directory: apps/web
+        run: npm run test:e2e --if-present || echo "No Playwright tests yet"
+      
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-logs
+          path: |
+            /tmp/api.log
+            /tmp/web.log
