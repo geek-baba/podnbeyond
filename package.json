@@ -17,12 +17,15 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
     "dotenv-cli": "^7.3.0",
     "eslint": "^8.55.0",
     "prettier": "^3.1.0",
     "ts-node": "^10.9.1",
     "turbo": "^1.11.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "wait-on": "^7.2.0"
   },
   "engines": {
     "node": ">=18.0.0"
